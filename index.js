@@ -1,38 +1,39 @@
 require('dotenv').config();
 const express = require('express');
 const cors = require('cors');
+const { MongoClient, ServerApiVersion, ObjectId } = require('mongodb');
+const jwt = require('jsonwebtoken');
+
 const app = express();
 const PORT = process.env.PORT || 5000;
-const { MongoClient, ServerApiVersion } = require('mongodb');
-const jwt = require('jsonwebtoken');
 
 app.use(cors());
 app.use(express.json());
 
-
 function createToken(user) {
     const token = jwt.sign(
-      {
-        email: user.email,
-      },
-      "secret",
-      { expiresIn: "30d" }
+        { email: user.email },
+        process.env.JWT_SECRET,
+        { expiresIn: "30d" }
     );
     return token;
-  }
+}
 
 function verifyToken(req, res, next) {
-    const token = req.headers.authorization.split(" ")[1];
-    const verify = jwt.verify(token, "secret");
-    if (!verify?.email) {
-        return res.send("You are not authorized");
+    const token = req.headers.authorization?.split(" ")[1];
+    if (!token) {
+        return res.status(403).send("You are not authorized");
     }
-    req.user = verify.email;
-    next();
-};
+    try {
+        const verify = jwt.verify(token, process.env.JWT_SECRET);
+        req.user = verify.email;
+        next();
+    } catch (err) {
+        return res.status(403).send("You are not authorized");
+    }
+}
 
 const uri = process.env.DATABASE;
-// Create a MongoClient with a MongoClientOptions object to set the Stable API version
 const client = new MongoClient(uri, {
     serverApi: {
         version: ServerApiVersion.v1,
@@ -40,6 +41,7 @@ const client = new MongoClient(uri, {
         deprecationErrors: true,
     }
 });
+
 async function run() {
     try {
         await client.connect();
@@ -47,7 +49,6 @@ async function run() {
         const productDB = client.db("shoesDB");
         const shoesCollection = productDB.collection("shoesCollection");
         const userCollection = productDB.collection("userCollection");
-        // product
 
         app.get("/shoes", async (req, res) => {
             const shoesData = shoesCollection.find();
@@ -57,9 +58,7 @@ async function run() {
 
         app.get("/shoes/:id", async (req, res) => {
             const id = req.params.id;
-            const shoesData = await shoesCollection.findOne({
-                _id: new ObjectId(id),
-            });
+            const shoesData = await shoesCollection.findOne({ _id: new ObjectId(id) });
             res.send(shoesData);
         });
 
@@ -85,17 +84,14 @@ async function run() {
             res.send(result);
         });
 
-
         app.get("/user/get/:id", async (req, res) => {
             const id = req.params.id;
-            console.log(id);
             const result = await userCollection.findOne({ _id: new ObjectId(id) });
             res.send(result);
         });
 
         app.get("/user/:email", async (req, res) => {
             const email = req.params.email;
-            console.log(email)
             const result = await userCollection.findOne({ email });
             res.send(result);
         });
@@ -107,10 +103,9 @@ async function run() {
 
         app.post("/user", async (req, res) => {
             const user = req.body;
-
             const token = createToken(user);
-            const isUserExist = await userCollection.findOne({ email: user?.email });
-            if (isUserExist?._id) {
+            const isUserExist = await userCollection.findOne({ email: user.email });
+            if (isUserExist) {
                 return res.send({
                     status: "success",
                     message: "Login success",
@@ -118,7 +113,7 @@ async function run() {
                 });
             }
             await userCollection.insertOne(user);
-            return res.send({ token });
+            res.send({ token });
         });
 
         app.patch("/user/:email", async (req, res) => {
@@ -139,24 +134,21 @@ async function run() {
                 { _id: new ObjectId(id) },
                 { $set: updatedData }
             );
-            console.log(result)
             res.send(result);
         });
 
         console.log("The adidas server is successfully connected to MongoDB!");
     } finally {
-        // Ensures that the client will close when you finish/error
+        // Uncomment the following line if you want to close the connection after finishing
         // await client.close();
     }
 }
 run().catch(console.dir);
 
-
-
 app.get("/", (req, res) => {
     res.send("The Adidas Server is running!");
 });
 
-app.listen(PORT, (req, res) => {
-    console.log("Server is running on port :", PORT);
+app.listen(PORT, () => {
+    console.log("Server is running on port:", PORT);
 });

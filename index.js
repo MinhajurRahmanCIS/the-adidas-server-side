@@ -12,12 +12,14 @@ app.use(express.json());
 
 function createToken(user) {
     const token = jwt.sign(
-        {
-            email: user.email,
-        }
+      {
+        email: user.email,
+      },
+      "secret",
+      { expiresIn: "30d" }
     );
     return token;
-};
+  }
 
 function verifyToken(req, res, next) {
     const token = req.headers.authorization.split(" ")[1];
